@@ -1,0 +1,153 @@
+================================================================================
+FALCONWATCH: REAL-TIME EDR MONITORING SYSTEM - COMPLETE RUN & EXPLANATION GUIDE
+================================================================================
+
+This guide provides a comprehensive explanation of the FalconWatch Endpoint 
+Detection and Response (EDR) project structure, architecture, and step-by-step 
+instructions on how to run, test, and demonstrate its capabilities.
+
+--------------------------------------------------------------------------------
+1. PROJECT ARCHITECTURE & COMPONENT OVERVIEW
+--------------------------------------------------------------------------------
+FalconWatch is divided into two distinct operating modes:
+A. Real-Time Client-Server EDR System (Web-based)
+B. Standalone Console-based Local Monitoring Agent
+
+---
+A. Real-Time Client-Server EDR System (Web-based)
+This is the core full-stack application. It consists of:
+1. Backend Server (FastAPI):
+   - Located in the `backend/` directory.
+   - Powered by FastAPI and uses SQLite (`backend/edr.db`) to store endpoint data, services, and alerts.
+   - Sets up two primary WebSocket connections:
+     * `/ws/agent`: Receives real-time telemetry updates (processes and services) from active agents, passes them to a detection engine, and commits them to the database.
+     * `/ws/client`: Streams live updates, threat alerts, and system telemetry to the React dashboard.
+   - Exposes REST API endpoints for authentication (`/api/login`), fetching processes/services/alerts, resolving alerts, triggering simulated threats, exporting data to CSV, and sending process termination commands to connected agents.
+
+2. Endpoint Telemetry Agent (Python):
+   - Located in the `agent/` directory.
+   - Run on target Windows machines to collect active processes and registered services.
+   - Connects to the backend WebSocket (`ws://127.0.0.1:8000/ws/agent`).
+   - Gathers telemetry using `psutil` and `wmi` (Windows Management Instrumentation) libraries.
+   - Streams telemetry packets to the backend every 5 seconds.
+   - Constantly listens on the WebSocket channel for remote management commands sent by the administrator (e.g., process termination request). When a termination request is received, it terminates the process using `psutil` and sends the updated status.
+
+3. React Dashboard Frontend (Vite & Tailwind CSS):
+   - Located in the `frontend/` directory.
+   - A modern, glassmorphic Security Operations Center (SOC) dashboard.
+   - Uses WebSockets to dynamically refresh alerts, process tables, startup service status, and threat risk scoring without requiring page reloads.
+   - Features:
+     * Real-time logs for active process lists and Windows services.
+     * Interactive Process Tree mapping process spawn relationships (parent-child).
+     * Charts visualising threat indicators and alert severity trends.
+     * Actions to resolve alerts and remotely kill malicious processes directly from the dashboard.
+     * A built-in "Run Security Test" button to trigger mock attacks.
+
+---
+B. Standalone Console-based Local Monitoring Agent
+This is a lightweight local execution mode, useful for isolated testing without launching the FastAPI server or React frontend.
+- Files: Root directory `agent.py`, `analyzer.py`, `reporter.py`, `scanner.py`, and `rules.json`.
+- How it works:
+  * Gathers system processes and services locally.
+  * Compares current services with a startup baseline.
+  * Analyzes logs against heuristic rules defined in `rules.json`.
+  * Writes alerts directly to local files inside a `logs/` directory.
+
+---
+C. Heuristic Detection Engine (`backend/detector.py` & `agent/rules.json`)
+The detection engine enforces heuristic security rules:
+- Process Spawn Chains: Identifies if an Office program (winword.exe, excel.exe, etc.) spawns a command line tool (cmd.exe, powershell.exe, mshta.exe, etc.).
+- Execution Path Checks: Warns when processes or services execute out of high-risk folders like Windows Temp, AppData Temp, or Users\Public.
+- Process Blacklist: Detects popular pentesting and exploit tools like mimikatz.exe, psexec.exe, nc.exe, cobaltstrike.exe, etc.
+- Rogue Services: Flags any newly registered startup service compared to the baseline.
+
+--------------------------------------------------------------------------------
+2. SYSTEM REQUIREMENTS & PREREQUISITES
+--------------------------------------------------------------------------------
+1. Operating System: Windows (required for process ownership querying, WMI service queries, and startup service baseline tracking).
+2. Python: Python 3.8 or higher.
+3. Node.js: Node 16 or higher (for frontend dashboard dependencies).
+
+--------------------------------------------------------------------------------
+3. STEP-BY-STEP RUNNING INSTRUCTIONS
+--------------------------------------------------------------------------------
+
+Follow these steps sequentially to set up and run FalconWatch:
+
+STEP 1: INSTALL PYTHON DEPENDENCIES
+Open a Command Prompt or PowerShell in the project's root directory and run:
+   cmd> pip install -r requirements.txt
+   (Installs fastapi, uvicorn, websockets, psutil, WMI, pywin32, pydantic)
+
+STEP 2: RUN THE BACKEND SERVER
+In the same or a new terminal at the root directory, run:
+   cmd> python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+   
+   - You should see the logs saying "Uvicorn running on http://127.0.0.1:8000".
+   - The backend automatically initializes `backend/edr.db` and starts listening for agent/client connections.
+
+STEP 3: RUN THE REACT FRONTEND DASHBOARD
+Open a third terminal, navigate to the `frontend/` directory, install Node modules, and start the development server:
+   cmd> cd frontend
+   cmd> npm install
+   cmd> npm run dev
+
+   - Vite will start the frontend. Take note of the port (usually http://localhost:5173 or http://localhost:3000).
+   - Open your browser and navigate to the address (e.g., http://localhost:5173).
+
+STEP 4: ACCESS THE DASHBOARD & LOGIN
+   - In your browser, you will be presented with the FalconWatch SOC login panel.
+   - Enter the default administrator credentials:
+     * Username: admin
+     * Secret Key: admin123
+   - Upon logging in, you will see the Glassmorphic Dashboard. Initially, the Agent status indicator in the top right will show "DISCONNECTED" since the agent isn't running yet.
+
+STEP 5: RUN THE ENDPOINT TELEMETRY AGENT
+Open a fourth terminal (running as Administrator is highly recommended to allow the agent to read all system processes and execute remote termination commands) and run:
+   cmd> python agent/agent.py
+   
+   - The agent will print connection logs, establish a WebSocket connection with the backend at ws://127.0.0.1:8000/ws/agent, and stream active process and service snapshots every 5 seconds.
+   - Check the React Dashboard: the Agent Status icon will immediately turn green and show "CONNECTED". The process and service lists will populate with your real Windows system telemetry.
+
+--------------------------------------------------------------------------------
+4. VERIFYING DETECTIONS & INCIDENT RESPONSE (DEMO FLOW)
+--------------------------------------------------------------------------------
+
+Once the backend, frontend, and telemetry agent are up and running, you can test the EDR detection capabilities:
+
+1. SIMULATE ATTACKS FROM THE FRONTEND DASHBOARD
+   - Click the "Run Security Test" button in the top navigation bar of the React Dashboard.
+   - This sends simulated attacks to the backend API, triggering three alerts:
+     * CRITICAL: winword.exe spawning powershell.exe (Office App Shell spawn heuristic)
+     * MEDIUM: Suspicious file creation in Users\Public path
+     * HIGH: New startup service registered (DemoUpdateService)
+   - These alerts will instantly appear on your dashboard with acoustic/visual indicators due to real-time WebSockets synchronization.
+
+2. SIMULATE ATTACKS FROM STANDALONE SCRIPT
+   - As an alternative to the dashboard button, you can run the simulator via terminal:
+     cmd> python security_test_simulator.py
+   - This script posts test payloads directly to the backend simulation endpoint, generating the same threats in the database and streaming them to the active UI.
+
+3. VISUALIZE THE THREAT IN THE PROCESS TREE
+   - Click the "Process Tree" tab in the dashboard navigation menu.
+   - Locate the simulated `winword.exe` process node. You will see its children spawned in a tree graph. The child node `powershell.exe` will be highlighted in critical red, showing the exact attack path of the malicious execution chain.
+
+4. REMOTE PROCESS REMEDIATION (KILL PROCESS)
+   - Go to the "Active Processes" or "Threat Alerts" panel.
+   - Find a running process you wish to terminate (e.g., a dummy process you opened, or an alert node).
+   - Click the "Terminate Process" or "Kill" button next to its PID on the dashboard.
+   - The React dashboard sends a POST request `/api/processes/{pid}/terminate` to the backend.
+   - The backend forwards the termination command through the `/ws/agent` WebSocket connection to the Python telemetry agent.
+   - The agent executes `proc.terminate()`, terminates the process, and reports back. The process disappears from the active processes list in real time.
+
+5. MANAGE ALERTS AND GENERATE REPORTS
+   - Navigate to the "Threat Alerts" tab to filter alerts by severity (Critical, High, Medium, Low) or resolution status.
+   - Click "Resolve" to mark an alert as resolved.
+   - Navigate to the "Reports" tab to view metrics summary or click "Export CSV" to download an Excel-compatible comma-separated log of all detected security events.
+
+--------------------------------------------------------------------------------
+5. TROUBLESHOOTING
+--------------------------------------------------------------------------------
+- Connection Issues: If the frontend says "Disconnected" or fails to load data, ensure that the FastAPI server is running on port 8000 and that you are not running another application on that port.
+- Missing Windows libraries: If Python throws ModuleNotFoundErrors for WMI or win32, make sure to install pywin32 manually (`pip install pywin32`) and run python's post-installation script if needed (`python Scripts/pywin32_postinstall.py -install` from your python directory).
+- Kill Command Access Denied: If terminating a process fails, it is usually because the agent script is running without administrative/elevated permissions. Close the agent terminal and re-run it inside a Command Prompt running as "Administrator".

@@ -1,0 +1,23 @@
+{
+  "suspicious_parents": {
+    "winword.exe": ["cmd.exe", "powershell.exe", "wscript.exe", "cscript.exe", "mshta.exe"],
+    "excel.exe": ["cmd.exe", "powershell.exe", "wscript.exe", "cscript.exe", "mshta.exe"],
+    "powerpnt.exe": ["cmd.exe", "powershell.exe", "wscript.exe", "cscript.exe", "mshta.exe"],
+    "outlook.exe": ["cmd.exe", "powershell.exe", "wscript.exe", "cscript.exe", "mshta.exe"]
+  },
+  "high_risk_paths": [
+    "AppData\\Local\\Temp",
+    "Windows\\Temp",
+    "Users\\Public",
+    "\\Temp\\"
+  ],
+  "blacklisted_processes": [
+    "mimikatz.exe",
+    "psexec.exe",
+    "nc.exe",
+    "ncat.exe",
+    "cobaltstrike.exe",
+    "cain.exe",
+    "netcat.exe"
+  ]
+}

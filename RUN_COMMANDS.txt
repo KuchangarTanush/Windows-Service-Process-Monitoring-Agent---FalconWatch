@@ -1,0 +1,79 @@
+================================================================================
+FALCONWATCH: STEPWISE RUNNING COMMANDS & EXPLANATIONS
+================================================================================
+
+This document provides a clean, sequential list of command-line instructions to 
+set up and execute the FalconWatch EDR platform.
+
+--------------------------------------------------------------------------------
+STEP 1: INSTALL SYSTEM & PYTHON DEPENDENCIES
+--------------------------------------------------------------------------------
+Open a terminal (Command Prompt or PowerShell) in the project root directory.
+
+[Command]
+pip install -r requirements.txt
+
+[Explanation]
+This command installs the required Python dependencies:
+- 'fastapi' & 'uvicorn': To build and host the EDR backend web server and APIs.
+- 'websockets': Facilitates low-latency duplex streaming between agent, server, and client.
+- 'psutil' & 'wmi': System telemetry libraries used to scan Windows processes, query services, and execute termination commands.
+- 'pywin32': Win32 API extensions for Python, required to query Windows Services.
+- 'pydantic': Handles backend data validation and model parsing.
+
+--------------------------------------------------------------------------------
+STEP 2: LAUNCH THE FASTAPI BACKEND SERVER
+--------------------------------------------------------------------------------
+Open a terminal in the project root directory and run the following command to start the backend:
+
+[Command]
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+
+[Explanation]
+- 'python -m uvicorn': Launches the Uvicorn ASGI web server.
+- 'backend.main:app': Tells Uvicorn to look inside 'backend/main.py' for the 'app' FastAPI instance.
+- '--host 127.0.0.1 --port 8000': Binds the web server to localhost on port 8000.
+- '--reload': Enables hot-reloading (server restarts automatically when code changes).
+- When started, this initializes the SQLite database ('backend/edr.db') and opens ports to listen for WebSocket/HTTP connections.
+
+--------------------------------------------------------------------------------
+STEP 3: BUILD AND RUN THE REACT DASHBOARD
+--------------------------------------------------------------------------------
+Open a NEW (second) terminal, navigate into the 'frontend/' directory, install modules, and run the developer server:
+
+[Commands]
+cd frontend
+npm install
+npm run dev
+
+[Explanation]
+- 'cd frontend': Changes the shell context to the frontend React workspace.
+- 'npm install': Downloads and installs all frontend packages (React 19, Vite, Recharts for graphs, Lucide Icons, and Tailwind CSS) specified in 'package.json'.
+- 'npm run dev': Launches the Vite bundler's local development server. Typically, this starts the dashboard at 'http://localhost:5173' or 'http://localhost:3000'. Open this link in your web browser to view the SOC dashboard.
+
+--------------------------------------------------------------------------------
+STEP 4: RUN THE ENDPOINT TELEMETRY AGENT
+--------------------------------------------------------------------------------
+Open a NEW (third) terminal with Administrator privileges (Right-click Command Prompt/PowerShell -> "Run as Administrator") and execute:
+
+[Command]
+python agent/agent.py
+
+[Explanation]
+- 'python agent/agent.py': Launches the Python telemetry client script.
+- The agent establishes a persistent WebSocket connection to the backend server at 'ws://127.0.0.1:8000/ws/agent'.
+- Once connected, it polls running processes and Windows services every 5 seconds, sending telemetry packets to the backend.
+- Running as Administrator is necessary so the agent has sufficient OS privileges to read service descriptions and execute process kill/remediation commands sent by the SOC dashboard.
+
+--------------------------------------------------------------------------------
+STEP 5: RUN THE SECURITY ATTACK SIMULATOR (DEMO MODE)
+--------------------------------------------------------------------------------
+While the Backend and Agent are active, open a NEW (fourth) terminal at the root directory and run the standalone mock attacker:
+
+[Command]
+python security_test_simulator.py
+
+[Explanation]
+- 'python security_test_simulator.py': Runs the benign threat injector script.
+- It sends simulated JSON alerts (Office apps launching command terminals, suspicious file drops, and unauthorized startup services) directly to the server's HTTP endpoint.
+- This lets you verify that the detection rules work, triggers alerts on the SOC dashboard in real time, and populates the Interactive Process Tree.
